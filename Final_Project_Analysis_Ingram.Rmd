@@ -1,0 +1,415 @@
+---
+title: "Final Project:  DB Shuster Social Media Campaign Analysis"
+author: "Amelia Ingram"
+date: "5/16/2022"
+output: html_document
+---
+
+```{r setup, include=TRUE}
+#install.packages("knitr")
+library(knitr)
+knitr::opts_chunk$set(echo = FALSE)
+#install.packages("openxlsx")
+library(openxlsx)
+#install.packages("tidytext")
+library(tidytext)
+#install.packages("dplyr")
+library(dplyr)
+#install.packages("tidyr")
+library(tidyr)
+#install.packages("scales")
+library(scales)
+#install.packages("ggplot2")
+library(ggplot2)
+#install.packages("rlang")
+library(rlang)
+#install.packages("wordcloud")
+library(wordcloud)
+#install.packages("forcats")
+library(forcats)
+#install.packages("igraph")
+library(igraph)
+#install.packages("ggraph")
+library(ggraph)
+#install.packages("widyr")
+library(widyr)
+```
+# Tasks
+For this report, I am tasked with analyzing a sample dataset of Amazon reviews from DB Shuster and five competitors to test their ability to fit within three book genre categories (spy thriller, family saga and historical fiction).  I will perform bigrams of review words as well as a network plot of their correlations.
+
+## Review Data
+First I will load my collected dataset of D.B. Shuster book reviews and a sample of 100 of the most recent reviews from each of the five competitors from Amazon. 
+
+```{r}
+reviews <- read.xlsx("Shuster_Reviews_data.xlsx", sheet=1)
+reviews[1:5,]
+```
+Since I am only interested in analyzing the most recent book series "Sins of a Spy", I will create a subset of that series as well as a subset of the competitors.
+
+```{r}
+reviews_rev <- reviews %>%
+  filter(Author=="D.B. Shuster") %>%
+  mutate(ifelse(Author=="D.B. Shuster" & Book=="To Catch a Traitor" | Book=="To Hunt a Spy", "D.B. Shuster", NA))
+
+reviews_comps <- reviews %>%
+  filter(Author!="D.B. Shuster") %>%
+  mutate(ifelse(Author!= "D.B. Shuster", "Comps", NA))
+```
+
+
+## Bigrams
+We will first look at bi-grams, or 2-word combinations within the Sins of a Spy series of D.B. Shuster.  
+```{r}
+#bigrams for Moscow Spies
+bigrams <- reviews_rev %>%
+  unnest_tokens(bigram, Review, token = "ngrams", n = 2)
+
+bigrams %>%
+  count(bigram, sort = TRUE)
+```
+
+## Removing Stop Words
+There are a lot of stop words in the data, so we will need to use a combination of both standard and custom stop words. I will use a custom stop words set from the previous assignment.
+
+```{r}
+data(stop_words)
+custom <- data.frame(word = c("d.b", "shuster", "kings", "brighton", "book", "1", "2", "3", "4", "5", "episode", "series", "it's", "books", "db", "episodes", "beatriz", "williams", "r.j.", "rj", "patterson", "charmaine", "craig", "alina", "adams", "kate", "quinn", "rose", "reading", "read", "reader", "readers", "recommend", "written", "fiction", "story", "miss", "page", "pages", "chapters", "author", "authors", "writing", "told", "makes", "found", "characters", "free", "copy", "booksprout", "review", "its", "it's ", "ii", "NA"))
+
+```
+
+To remove stop words from bigrams, we need to apply the stop words both to the first word and the second word in the bigram.
+
+```{r}
+#First, we separate the bigram words into separate columns
+bigrams_separated <- bigrams %>%
+  separate(bigram, c("word1", "word2"), sep = " ")
+
+bigrams_filtered <- bigrams_separated %>%
+  filter(!word1 %in% stop_words$word) %>%
+  filter(!word2 %in% stop_words$word) %>%
+  filter(!word1 %in% custom$word) %>%
+  filter(!word2 %in% custom$word) 
+```
+
+## 1.What are the most common bigrams?
+```{r}
+# new bigram counts using reviews_rev:
+bigram_counts <- bigrams_filtered %>% 
+  count(word1, word2, sort = TRUE)
+bigram_counts %>%
+  unite(bigram, word1, word2, sep = " ")
+```
+The new bigram counts reveal there is an interest in the fast pace, historical themes, gripping tension, and kgb agent aspects to the series.  I will now apply the same process to produce bigrams for the comps reviews.
+
+```{r}
+#bigrams for Comps
+bigrams2 <- reviews_comps %>%
+  unnest_tokens(bigram, Review, token = "ngrams", n = 2)
+
+#First, we separate the bigram words into separate columns
+bigrams_separated2 <- bigrams2 %>%
+  separate(bigram, c("word1", "word2"), sep = " ")
+
+bigrams_filtered2 <- bigrams_separated2 %>%
+  filter(!word1 %in% stop_words$word) %>%
+  filter(!word2 %in% stop_words$word) %>%
+  filter(!word1 %in% custom$word) %>%
+  filter(!word2 %in% custom$word) 
+
+# filtered bigram counts for Comps:
+bigram_counts2 <- bigrams_filtered2 %>% 
+  count(word1, word2, sort = TRUE)
+bigram_counts2 %>%
+  unite(bigram, word1, word2, sep = " ")
+```
+ The top bigrams for the comps reviews are more history-focused:  cold war, world war, bletchley park, soviet union, and spy ring returns in the fifth place rank.  
+ 
+## Trigrams
+
+Let's now examine the trigrams. As with the trigrams, we'll line up the three words in consecutive columns and remove the standard and custom stop words.
+```{r}
+#Trigrams for Moscow Spies
+trigrams <- reviews_rev %>%
+  unnest_tokens(trigram, Review, token = "ngrams", n = 3)
+
+trigrams_separated <- trigrams %>%
+  separate(trigram, c("word1", "word2", "word3"), sep = " ")
+
+trigrams_filtered <- trigrams_separated %>%
+  filter(!word1 %in% stop_words$word,
+         !word2 %in% stop_words$word,
+         !word3 %in% stop_words$word) %>%
+  filter(!word1 %in% custom$word,
+         !word2 %in% custom$word,
+         !word3 %in% custom$word)
+
+trigram_counts <- trigrams_filtered %>%
+  count(word1, word2, word3, sort = TRUE)
+
+trigram_counts %>%
+  unite(trigram, word1, word2, word3, sep = " ")
+```
+# 2.What are the most common Trigrams?
+The most common trigrams return fewer numbers, but there are some patterns among those trigram phrases that return at least twice among the set.  The most common trigrams for Sins of a Spy start with nationally acclaimed titles, russian jews removed, russian mob crimes, main ingredient reflected, and russian mafia novels.  While the top trigram discusses the series' rankings, others discuss a focus on Russia, spies, Russian Jews and the Russian mob/mafia.  Now lets compare with the trigrams of the comps.
+
+```{r}
+#Trigrams for Comps
+trigrams2 <- reviews_comps %>%
+  unnest_tokens(trigram, Review, token = "ngrams", n = 3)
+
+trigrams_separated2 <- trigrams2 %>%
+  separate(trigram, c("word1", "word2", "word3"), sep = " ")
+
+trigrams_filtered2 <- trigrams_separated2 %>%
+  filter(!word1 %in% stop_words$word,
+         !word2 %in% stop_words$word,
+         !word3 %in% stop_words$word) %>%
+  filter(!word1 %in% custom$word,
+         !word2 %in% custom$word,
+         !word3 %in% custom$word)
+
+trigram_counts2 <- trigrams_filtered2 %>%
+  count(word1, word2, word3, sort = TRUE)
+
+trigram_counts2 %>%
+  unite(trigram, word1, word2, word3, sep = " ")
+```
+Since the trigrams produce similar but parallel phrases that reflect the plot themes (with the addition of characters) I will skip over them and continue with further analysis of the bigrams.  
+
+## Bigram Networks
+
+Now let's visualize the relationships between our bigrams using igraph to map the network of relationships.  First, we will visualize bigrams of DB Shuster reviews.  All of the following network graphs will use the Fruchterman-Reingold algorithm ("fr") layout.
+```{r}
+#bigram network of DB Shuster
+bigram_graph <- bigram_counts %>%
+  filter(n > 2) %>%
+  graph_from_data_frame()
+bigram_graph
+
+set.seed(2017)
+
+ggraph(bigram_graph, layout = "fr") +
+  geom_edge_link() +
+  geom_node_point() +
+  geom_node_text(aes(label = name), vjust = 1, hjust = 1) +
+  ggtitle("Network Graph of DB Shuster keywords")
+```
+
+The data shows two larger connections between words outside of the bigrams:  the connections between "mafia", "russian", "jews" and "historical" with "love" keywords. According to the network layout, the more complex connections appear on the periphery.  Here's a more refined version to show the directionality of the relationships.
+
+```{r}
+#more nuanced plot of the same thing with directional arrows
+set.seed(2020)
+
+a <- grid::arrow(type = "closed", length = unit(.1, "inches"))
+
+ggraph(bigram_graph, layout = "fr") +
+  geom_edge_link(aes(edge_alpha = n), show.legend = FALSE,
+                 arrow = a, end_cap = circle(.08, 'inches')) +
+  geom_node_point(color = "lightblue", size = 4) +
+  geom_node_text(aes(label = name), vjust = 1, hjust = 1) +
+  ggtitle("Directional Network of DB Shuster Keywords") +
+  theme_void()
+```
+This affirms the more convincing directionality of these networked connections on the same select group of keywords (in order of direction):  "historical", "paced", "leaving", "tale", "agent", "acclaimed" and "mafia".  The intensity of the directional arrows suggests that pace and historical love are the most compelling, with agent and tale (story-telling) as a secondary preference for this series.  This is somewhat different to the previous graph, in the favorable opinions of "pace", "leaving" (character movement) and "acclaimed" (author reputation). Now, let's compare with the network graph for the comps.
+
+```{r}
+#bigram network graph for all comps
+bigram_graph2 <- bigram_counts2 %>%
+  filter(n > 3) %>%
+  graph_from_data_frame()
+bigram_graph2
+
+set.seed(2017)
+
+ggraph(bigram_graph2, layout = "fr") +
+  geom_edge_link(aes(edge_alpha = n), show.legend = FALSE,
+                 arrow = a, end_cap = circle(.08, 'inches')) +
+  geom_node_point(color = "lightblue", size = 4) +
+  geom_node_text(aes(label = name), vjust = 1, hjust = 1) +
+  ggtitle("Directional Network of Competitors") +
+  theme_void()
+```
+The collective network graph for all five comps is too complex, but it does demonstrate some complex connectivity and direction between the keywords "war", "spy", and "sisters".  I will clarify these rough assumptions by grouping by author, using a frequency of greater than three occurences.
+
+```{r}
+#Create new filter for Comps by Author
+reviews_comps_author <- reviews %>%
+  filter(Author!="D.B. Shuster") %>%
+  mutate(ifelse(Author!= "D.B. Shuster", Author, NA))
+
+#Unnest tokens for Comps by Author
+bigrams3 <- reviews_comps_author %>%
+  unnest_tokens(bigram, Review, token = "ngrams", n = 2) %>%
+  group_by(Author)
+
+bigrams3 %>%
+  count(bigram, sort = TRUE)
+
+#Then, we separate the bigram words into separate columns
+bigrams_separated3 <- bigrams3 %>%
+  separate(bigram, c("word1", "word2"), sep = " ")
+
+#filter out the stop words
+bigrams_filtered3 <- bigrams_separated3 %>%
+  filter(!word1 %in% stop_words$word) %>%
+  filter(!word2 %in% stop_words$word) %>%
+  filter(!word1 %in% custom$word) %>%
+  filter(!word2 %in% custom$word) 
+
+# filtered bigram counts for Comps:
+bigram_counts3 <- bigrams_filtered3 %>% 
+  count(word1, word2, sort = TRUE)
+bigram_counts3 %>%
+  unite(bigram, word1, word2, sep = " ")
+
+#bigram network graph for comps
+bigram_graph3 <- bigram_counts3 %>%
+  filter(n > 3) %>%
+  graph_from_data_frame()
+bigram_graph3
+
+set.seed(2017)
+
+ggraph(bigram_graph3, layout = "fr") +
+  geom_edge_link(aes(edge_alpha = n, fill=n), show.legend = TRUE,
+                 arrow = a, end_cap = circle(.07, 'inches')) +
+  geom_node_point(color="light blue", size = 4) +
+  geom_node_text(aes(label = name), vjust = 1, hjust = 1) +
+  ggtitle("Network of Competitors Grouped by Author") +
+  theme_void()
+```
+
+Here, we see that Beatriz Williams produces the most keyword connections, with the strongest directional relationship towards "spy" and "intelligence" keywords.  These sometimes produce directional connections to their plot themes, with Alina Adams strongly connected to Jewish, R.J. Patterson connected to the character Titus, and Kate Quinn connected to Bletchely.  While Charmaine Craig was second in the number of keyword occurrences, she did not have any directionality in her bigram network.
+
+#3. What information do they give you about the market for what your client offers?
+In a comparison of D.B. Shuster's bigram networks and those of the comps, it appears that Shuster's more closely comparable to Beatriz Williams in the combination of spy and historical love subgenres.  Both of the authors produce similar responses from readers who strongly identify with the genre, and also have interest in the plot/character development.
+
+## Correlations
+Now, we'll examine relationships between words statistically rather than visually. I'll be looking at the co-occurence within each DB Shuster review to generate correlation statistics. 
+
+My first step is to create a review id variable in order to quantify the relationships.
+
+```{r}
+#create review id variable within DB Shuster reviews (reviews_rev)
+reviews_rev$id <- 1:nrow(reviews_rev)
+str(reviews_rev)
+```
+Next, I need to unnest tokens. Note that the code I use here is the basic unnesting of word tokens, together with the standard and custom stop words. However, I stop short of adding the count command we've used before. This way, rather than having the count of each word, I now have the words broken out for each review, and the other variables in the dataset are also still available to use. 
+
+```{r}
+#unnest tokens
+words_rev <- reviews_rev %>%
+  unnest_tokens(word, Review) %>%
+  anti_join(stop_words)%>%
+  anti_join(custom)
+words_rev[1:10,]
+```
+
+Now we generate the pairwise counts for each set of words.
+
+```{r}
+# count words co-occuring within sections
+word_pairs_rev <- words_rev %>%
+  pairwise_count(word, id, sort = TRUE)
+word_pairs_rev
+```
+
+Then we can run a correlation using the widyr package. We filter for common pairings first. The filter number was adjusted to fit n >= 3 occurrences. This is a relatively low bar threshold, but we want to first see if there is any statistical strength in the keyword relationships.
+```{r}
+#generate correlation
+word_cors <- words_rev %>%
+  group_by(word) %>%
+  filter(n() >= 3) %>%
+  pairwise_cor(word, id, sort = TRUE)
+word_cors
+
+```
+The results are strikingly similar to what we saw in the directional network graph earlier.  Many of the same pair keywords are prominent, and produce a very strong correlation of 1.
+
+Next, I selected "historical", "spy", and "family" keywords to plot the correlations between keywords, this time increasing the co-occurrence to n=6.  This will narrow our focus to a more significant correlated occurrence.  Again, we are looking for statistical correlations between the keywords to test the strength of categorization with historical fiction, family saga or spy thriller genres.  This will help us to determine how to best market the series. Let's visualize the correlation to our target genre category keywords.
+
+```{r}
+#plot correlations for DB Shuster
+word_cors %>%
+  filter(item1 %in% c("historical", "spy", "family")) %>%
+  group_by(item1) %>%
+  slice_max(correlation, n = 6) %>%
+  ungroup() %>%
+  mutate(item2 = reorder(item2, correlation)) %>%
+  ggplot(aes(item2, correlation, fill=correlation)) +
+  ggtitle("Correlations of DB Shuster Keywords by Genre")+
+  geom_bar(stat = "identity") +
+  facet_wrap(~ item1, scales = "free") +
+  coord_flip()
+```
+Based on the visualization, "historical" has the strongest correlation with "compelling" as its top combination.  "family" has a moderate correlation to "union", which I assume ties into the family saga and characters which are returned heavily in that model.  "Spy" has the weakest correlation amongst the three, with the combination of "jewish" as the least correlated in that category.  Based on this analysis, we can determine that the historical genre has the strongest fit to Sins of a Spy reviewers, with family saga in second.  The weakest correlation was the spy thriller, which indicates that this genre marketing was an incorrect approach.
+
+Now I will produce the same pairwise correlation analysis to the competitors (comps).
+```{r}
+#create review id variable within Comps reviews (reviews_comps)
+reviews_comps$id <- 1:nrow(reviews_comps)
+str(reviews_comps)
+
+#unnest tokens
+comps_rev <- reviews_comps %>%
+  unnest_tokens(word, Review) %>%
+  anti_join(stop_words)%>%
+  anti_join(custom)
+comps_rev[1:10,]
+
+```
+
+```{r}
+# generate count words co-occuring within sections
+word_pairs_comps_cor <- comps_rev %>%
+  pairwise_count(word, id, sort = TRUE)
+word_pairs_comps_cor
+```
+
+```{r}
+#generate correlation
+cors_comps <- comps_rev %>%
+  group_by(word) %>%
+  filter(n() >= 3) %>%
+  pairwise_cor(word, id, sort = TRUE)
+cors_comps
+```
+
+```{r}
+#plot correlations for comps
+cors_comps %>%
+  filter(item1 %in% c("historical", "spy", "family")) %>%
+  group_by(item1) %>%
+  slice_max(correlation, n = 6) %>%
+  ungroup() %>%
+  mutate(item2 = reorder(item2, correlation)) %>%
+  ggplot(aes(item2, correlation, fill=correlation)) +
+  ggtitle("Correlations of Competitor Keywords by Genre")+
+  geom_bar(stat = "identity") +
+  facet_wrap(~ item1, scales = "free") +
+  coord_flip()
+```
+The results for the comps indicate that the spy genre is the most correlated with these authors, and family and historical reviews far behind.  This is interesting since two of the competitor authors were categorized as "historical" on Amazon; it suggests they were also mis-categorized.  
+
+
+Finally, I produced a network graph of the Shuster keyword correlations using a correlation of .7 (or 70% statistical significance--a very low bar to include as much of the network as possible) to determine the relative distance between the most common genres.
+
+```{r}
+# network of Shuster correlations
+set.seed(2016)
+
+plot <- word_cors %>%
+  filter(correlation > .7) %>%
+  graph_from_data_frame() %>%
+  ggraph(layout = "fr") +
+  ggtitle("Network of Correlated DB Shuster Keywords")+
+  geom_edge_link(aes(edge_alpha = correlation), show.legend = FALSE) +
+  geom_node_point(color = "lightblue", size = 5) +
+  geom_node_text(aes(label = name), repel = TRUE, point.padding = unit(0.2, "lines")) +
+  theme_void()
+plot
+```
+
+##Summary Findings
+In this correlation network plot of DB Shuster, we can see that the top two themes (historical and family) are relatively close distance to each other, compared to other keyword clusters. This can be interpreted to mean that the audiences who responded to historical fiction might also respond to family saga themes of character development.  This confirms our analysis and selection of historical fiction and family saga as the best fit with the Sins of a Spy series.
